@@ -100,10 +100,7 @@ func NewMCPService(settings *MCPSettings) (*MCPService, error) {
 		Level: logLevel,
 	}))
 
-	systemPrompt, err := loadSystemPrompt(settings.SystemPromptFile)
-	if err != nil {
-		return nil, fmt.Errorf("error loading system prompt: %w", err)
-	}
+	systemPrompt := ""
 
 	provider, err := createProvider(context.Background(), settings.ProviderName, settings.ModelName, systemPrompt)
 	if err != nil {
