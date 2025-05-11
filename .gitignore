@@ -1,0 +1,62 @@
+build/
+build/bin
+node_modules
+frontend/dist
+.idea/
+.DS_Store
+
+
+build/bin
+node_modules
+frontend/dist
+frontend/node_modules
+.idea
+
+# Wails build output
+build/
+wails-build/
+*.json
+*.csv
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+test.*
+# Dependency directories
+vendor/
+node_modules/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+*.log
+*.tmp
+
+# IDE specific files
+.vscode/
+.idea/
+*.iml
+
+# Go specific files
+*.mod
+*.sum
+
+# Frontend specific build output
+dist/
+public/
+.env
+.env.local
+.env.*.local
+
+# Cache
+.cache/
+*.cache
+
+# Temporary files and output of Wails
+wails/

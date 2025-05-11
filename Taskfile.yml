@@ -1,0 +1,144 @@
+# https://taskfile.dev
+
+version: '3'
+
+# Use default .env for most tasks
+dotenv: ['.env']
+
+vars:
+  APP_NAME: smart-spotlight-wails
+  BUILD_DIR: build
+  FRONTEND_DIR: frontend
+  BACKEND_DIR: backend
+  BUILD_FLAGS: -trimpath -ldflags="-s -w"
+
+tasks:
+  default:
+    deps: [all]
+
+  all:
+    deps: [clean, test, build]
+    desc: Clean, test, and build the application
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BUILD_DIR}}
+      - rm -rf {{.FRONTEND_DIR}}/dist
+      - rm -rf {{.FRONTEND_DIR}}/node_modules
+
+  deps:
+    desc: Install dependencies
+    cmds:
+      - cd {{.FRONTEND_DIR}} && npm install
+      - go mod tidy
+      - wails deps
+
+  test:
+    desc: Run all tests
+    deps: [test-backend, test-frontend, test-llm]
+
+  test-backend:
+    desc: Run backend tests
+    cmds:
+      - go test -v ./backend/...
+
+  test-frontend:
+    desc: Run frontend tests
+    cmds:
+      - cd {{.FRONTEND_DIR}} && npm test
+
+  test-llm:
+    desc: Run LLM integration tests
+    dotenv: ['.env.test']  # Override default dotenv for this specific task
+    cmds:
+      - go test -v ./backend/llm/...
+
+  build:
+    desc: Build the application
+    deps: [deps]
+    cmds:
+      - wails build {{.BUILD_FLAGS}}
+
+  dev-force:
+    desc: Run in development mode with force build
+    deps: [deps]
+    cmds:
+      - wails dev -forcebuild
+
+  dev:
+    desc: Run in development mode
+    cmds:
+      - wails dev
+
+  build-windows:
+    desc: Build for Windows
+    deps: [deps]
+    cmds:
+      - wails build -platform windows/amd64 {{.BUILD_FLAGS}}
+
+  build-mac:
+    desc: Build for macOS
+    deps: [deps]
+    cmds:
+      - wails build -platform darwin/universal {{.BUILD_FLAGS}}
+
+  build-linux:
+    desc: Build for Linux
+    deps: [deps]
+    cmds:
+      - wails build -platform linux/amd64 {{.BUILD_FLAGS}}
+
+  package:
+    desc: Package for all platforms
+    deps: [package-windows, package-mac, package-linux]
+
+  package-windows:
+    desc: Package for Windows
+    deps: [build-windows]
+    cmds:
+      - wails package -platform windows/amd64 -o {{.BUILD_DIR}}/{{.APP_NAME}}-windows-amd64.exe
+
+  package-mac:
+    desc: Package for macOS
+    deps: [build-mac]
+    cmds:
+      - wails package -platform darwin/universal -o {{.BUILD_DIR}}/{{.APP_NAME}}-mac-universal.app
+
+  package-linux:
+    desc: Package for Linux
+    deps: [build-linux]
+    cmds:
+      - wails package -platform linux/amd64 -o {{.BUILD_DIR}}/{{.APP_NAME}}-linux-amd64
+
+  coverage:
+    desc: Generate test coverage report
+    cmds:
+      - go test -coverprofile=coverage.out ./backend/...
+      - go tool cover -html=coverage.out
+
+  install-tools:
+    desc: Install development tools
+    cmds:
+      - go install github.com/wailsapp/wails/v2/cmd/wails@latest
+      - go install golang.org/x/tools/cmd/goimports@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+      - cd {{.FRONTEND_DIR}} && npm run format
+
+  lint:
+    desc: Lint code
+    cmds:
+      - golangci-lint run
+      - cd {{.FRONTEND_DIR}} && npm run lint
+
+  env:
+    desc: Print environment variables
+    cmds:
+      - echo "SPOT_AI_API_KEY={{.SPOT_AI_API_KEY}}"
+      - echo "SPOT_AI_MODEL={{.SPOT_AI_MODEL}}"
+      - echo "SPOT_AI_API_ENDPOINT={{.SPOT_AI_API_ENDPOINT}}"

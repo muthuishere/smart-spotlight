@@ -1,0 +1,17 @@
+/* Essential CSS variables */
+:root {
+  --base-children-height: 45px;
+  --base-height: 64px;
+  --suggestion-item-height: 58px;
+}
+
+/* Base styles */
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
