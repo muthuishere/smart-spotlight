@@ -101,10 +101,10 @@ func mcpToolsToAnthropicTools(serverName string, mcpTools []mcp.Tool) []models.T
 	return anthropicTools
 }
 
-func loadMCPConfig() (*MCPConfig, error) {
+func loadMCPConfig(settings *MCPSettings) (*MCPConfig, error) {
 	var configPath string
-	if configFile != "" {
-		configPath = configFile
+	if settings.ConfigFile != "" {
+		configPath = settings.ConfigFile
 	} else {
 		homeDir, err := os.UserHomeDir()
 		if err != nil {
@@ -115,22 +115,10 @@ func loadMCPConfig() (*MCPConfig, error) {
 
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		// Create default config
+		// Return empty config without creating a file
 		defaultConfig := MCPConfig{
 			MCPServers: make(map[string]ServerConfigWrapper),
 		}
-
-		// Create the file with default config
-		configData, err := json.MarshalIndent(defaultConfig, "", "  ")
-		if err != nil {
-			return nil, fmt.Errorf("error creating default config: %w", err)
-		}
-
-		if err := os.WriteFile(configPath, configData, 0644); err != nil {
-			return nil, fmt.Errorf("error writing default config file: %w", err)
-		}
-
-		slog.Info("created default config file", "path", configPath)
 		return &defaultConfig, nil
 	}
 
@@ -254,7 +242,7 @@ func NewServerConfigService(settings *MCPSettings) *ServerConfigService {
 
 // LoadConfig loads the MCP configuration and initializes clients
 func (s *ServerConfigService) LoadConfig() error {
-	config, err := loadMCPConfig()
+	config, err := loadMCPConfig(s.settings)
 	if err != nil {
 		return fmt.Errorf("error loading MCP config: %w", err)
 	}

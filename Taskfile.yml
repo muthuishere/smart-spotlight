@@ -36,7 +36,7 @@ tasks:
 
   test:
     desc: Run all tests
-    deps: [test-backend, test-frontend, test-llm]
+    deps: [test-backend, test-frontend, test-llm, test-mcp]
 
   test-backend:
     desc: Run backend tests
@@ -53,6 +53,12 @@ tasks:
     dotenv: ['.env.test']  # Override default dotenv for this specific task
     cmds:
       - go test -v ./backend/llm/...
+
+  test-mcp:
+    desc: Run MCP integration tests
+    dotenv: ['.env.test']  # Use MCP-specific environment variables
+    cmds:
+      - go test -v ./backend/llm/mcphost/...
 
   build:
     desc: Build the application

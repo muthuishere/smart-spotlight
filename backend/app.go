@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"log/slog"
-	"os"
 	"path/filepath"
 	"smart-spotlight-wails/backend/history"
 	"smart-spotlight-wails/backend/keybind"
@@ -30,12 +28,12 @@ type App struct {
 // NewApp creates a new App application struct
 func NewApp() *App {
 
-	slog.Info("Starting application")
-	for _, env := range os.Environ() {
-		//if strings.HasPrefix(strings.ToUpper(env), "APP") {
-		slog.Info("Environment variable", "value", env)
-		//		}
-	}
+	// slog.Info("Starting application")
+	// for _, env := range os.Environ() {
+	// 	//if strings.HasPrefix(strings.ToUpper(env), "APP") {
+	// 	slog.Info("Environment variable", "value", env)
+	// 	//		}
+	// }
 
 	return &App{
 		startupComplete: false,
