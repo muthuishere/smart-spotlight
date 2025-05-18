@@ -32,6 +32,8 @@ jobs:
         id: get_version
         working-directory: ${{ github.workspace }}
         run: |
+          cd ${{ github.workspace }}
+          ls -la
           VERSION=$(cat wails.json | jq -r .info.productVersion)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
@@ -39,6 +41,7 @@ jobs:
       - name: Install Dependencies and Build All Platforms
         working-directory: ${{ github.workspace }}
         run: |
+          cd ${{ github.workspace }}
           task deps
           task package
 
