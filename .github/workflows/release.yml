@@ -31,10 +31,6 @@ jobs:
             platform: darwin/universal
             artifact_name: Smart-Spotlight-AI
             asset_name: Smart-Spotlight-AI-mac-universal
-          - os: ubuntu-latest
-            platform: linux/amd64
-            artifact_name: Smart-Spotlight-AI
-            asset_name: Smart-Spotlight-AI-linux-amd64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,7 +49,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libx11-dev libxkbcommon-x11-dev pkg-config
+          sudo apt-get install -y libx11-dev libxkbcommon-x11-dev pkg-config xvfb
 
       - name: Install Task
         run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
@@ -62,8 +58,17 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Install Dependencies and Build
+        if: matrix.os != 'ubuntu-latest'
         run: |
           task deps
+          wails build -platform ${{ matrix.platform }} -trimpath -ldflags="-s -w"
+
+      - name: Install Dependencies and Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          task deps
+          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
+          export DISPLAY=:99.0
           wails build -platform ${{ matrix.platform }} -trimpath -ldflags="-s -w"
 
       - name: Upload Build Artifact
