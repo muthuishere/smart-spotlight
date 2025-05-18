@@ -1,0 +1,48 @@
+# Third Party Licenses
+
+This project includes the following third-party software:
+
+## Go Dependencies
+
+### github.com/wailsapp/wails/v2
+- License: MIT
+- Copyright (c) 2018-Present Lea Anthony
+
+### github.com/google/generative-ai-go
+- License: Apache-2.0
+- Copyright (c) Google LLC
+
+### github.com/mark3labs/mcp-go
+- License: MIT
+- Copyright (c) Mark3Labs
+
+### github.com/ollama/ollama
+- License: MIT
+- Copyright (c) 2023 Ollama
+
+## Frontend Dependencies
+
+### React
+- License: MIT
+- Copyright (c) Meta Platforms, Inc. and affiliates.
+
+### Vite
+- License: MIT
+- Copyright (c) 2019-present, Yuxi (Evan) You and Vite contributors
+
+### TailwindCSS
+- License: MIT
+- Copyright (c) Tailwind Labs, Inc.
+
+### marked
+- License: MIT
+- Copyright (c) 2018+, MarkedJS (https://github.com/markedjs/)
+
+### highlight.js
+- License: BSD-3-Clause
+- Copyright (c) 2006, Ivan Sagalaev
+
+Note: This is a non-exhaustive list of the main dependencies. For a complete list of dependencies and their licenses, please refer to:
+- Go dependencies: `go.mod`
+- Frontend dependencies: `frontend/package.json`
+
