@@ -25,16 +25,19 @@ jobs:
           sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install Wails
+        working-directory: ${{ github.workspace }}
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
       - name: Get Version
         id: get_version
+        working-directory: ${{ github.workspace }}
         run: |
           VERSION=$(cat wails.json | jq -r .info.productVersion)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Install Dependencies and Build All Platforms
+        working-directory: ${{ github.workspace }}
         run: |
           task deps
           task package
