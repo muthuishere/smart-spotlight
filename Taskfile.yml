@@ -6,7 +6,7 @@ version: '3'
 dotenv: ['.env']
 
 vars:
-  APP_NAME: smart-spotlight-wails
+  APP_NAME: Smart-Spotlight-AI
   BUILD_DIR: build
   FRONTEND_DIR: frontend
   BACKEND_DIR: backend
