@@ -11,6 +11,7 @@ vars:
   FRONTEND_DIR: frontend
   BACKEND_DIR: backend
   BUILD_FLAGS: -trimpath -ldflags="-s -w"
+  CGO_ENABLED: 1
 
 tasks:
   default:
@@ -24,6 +25,7 @@ tasks:
     desc: Remove build artifacts
     cmds:
       - rm -rf {{.BUILD_DIR}}/bin
+      - rm -rf {{.BUILD_DIR}}/{{.APP_NAME}}*
       - rm -rf {{.FRONTEND_DIR}}/dist
       - rm -rf {{.FRONTEND_DIR}}/node_modules
 
@@ -81,7 +83,7 @@ tasks:
     desc: Build for Windows
     deps: [deps]
     cmds:
-      - wails build -platform windows/amd64 {{.BUILD_FLAGS}}
+      - GOOS=windows GOARCH=amd64 CC=x86_64-w64-mingw32-gcc CGO_ENABLED={{.CGO_ENABLED}} wails build -platform windows/amd64 {{.BUILD_FLAGS}}
       - mv {{.BUILD_DIR}}/bin/{{.APP_NAME}}.exe {{.BUILD_DIR}}/{{.APP_NAME}}-windows-amd64.exe
 
   build-mac:

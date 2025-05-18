@@ -3,8 +3,39 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Get Version
+        id: get_version
+        run: |
+          VERSION=$(cat wails.json | jq -r .info.productVersion)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows/amd64
+            artifact_name: Smart-Spotlight-AI.exe
+            asset_name: Smart-Spotlight-AI-windows-amd64.exe
+          - os: macos-latest
+            platform: darwin/universal
+            artifact_name: Smart-Spotlight-AI
+            asset_name: Smart-Spotlight-AI-mac-universal
+          - os: ubuntu-latest
+            platform: linux/amd64
+            artifact_name: Smart-Spotlight-AI
+            asset_name: Smart-Spotlight-AI-linux-amd64
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       
@@ -18,44 +49,42 @@ jobs:
         with:
           node-version: '20.x'
 
-      - name: Install Task and jq
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y jq
-          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+      - name: Install Task
+        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install Wails
-        working-directory: ${{ github.workspace }}
         run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
-      - name: Get Version
-        id: get_version
-        working-directory: ${{ github.workspace }}
+      - name: Install Dependencies and Build
         run: |
-          cd ${{ github.workspace }}
-          ls -la
-          VERSION=$(cat wails.json | jq -r .info.productVersion)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        shell: bash
-
-      - name: Install Dependencies and Build All Platforms
-        working-directory: ${{ github.workspace }}
-        run: |
-          cd ${{ github.workspace }}
           task deps
-          task package
+          wails build -platform ${{ matrix.platform }} -trimpath -ldflags="-s -w"
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: build/bin/${{ matrix.artifact_name }}
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.get_version.outputs.version }}
-          name: Release v${{ steps.get_version.outputs.version }}
+          tag_name: v${{ needs.version.outputs.version }}
+          name: Release v${{ needs.version.outputs.version }}
           draft: false
           prerelease: false
           files: |
-            build/Smart-Spotlight-AI-windows-amd64.exe
-            build/Smart-Spotlight-AI-mac-universal
-            build/Smart-Spotlight-AI-linux-amd64
+            artifacts/Smart-Spotlight-AI-windows-amd64.exe/Smart-Spotlight-AI.exe
+            artifacts/Smart-Spotlight-AI-mac-universal/Smart-Spotlight-AI
+            artifacts/Smart-Spotlight-AI-linux-amd64/Smart-Spotlight-AI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
