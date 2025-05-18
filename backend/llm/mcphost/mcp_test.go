@@ -1,109 +1,112 @@
 package mcphost
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
+	"smart-spotlight-wails/backend/packages/llm/history"
 	"testing"
+	"time"
 )
 
-// printJSON is a helper function to pretty print JSON
-func printJSON(data interface{}) string {
-	jsonBytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("Error marshalling JSON: %v", err)
-	}
-	return string(jsonBytes)
+/* pretty-print helper */
+func pp(v any) string {
+	b, _ := json.MarshalIndent(v, "", "  ")
+	return string(b)
 }
 
 func TestMCPService(t *testing.T) {
-	// Load environment variables
+	// ── 1. set up slog for this test ──────────────────────────────────────────
+	logger := slog.New(
+		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug, // verbose for CI
+		}),
+	)
+	slog.SetDefault(logger)
 
-	//	apiKey := os.Getenv("SPOT_AI_API_KEY")
-
+	// ── 2. read env vars ─────────────────────────────────────────────────────
 	providerName := os.Getenv("SPOT_AI_PROVIDER")
 	baseURL := os.Getenv("SPOT_AI_API_ENDPOINT")
 	apiKey := os.Getenv("SPOT_AI_API_KEY")
 	modelName := os.Getenv("SPOT_AI_MODEL")
 	systemPrompt := os.Getenv("SPOT_AI_SYSTEM_PROMPT")
-	configFile := os.Getenv("SPOT_AI_CONFIG_FILE")
-	// Parse message window from environment variable, default to 10
-	messageWindow := 10
+	cfgFile := os.Getenv("SPOT_AI_CONFIG_FILE")
 
 	if apiKey == "" {
-		t.Skip("Skipping test: MCP_API_KEY environment variable not set")
+		logger.Warn("API key missing; skipping integration test")
+		t.Skip("SPOT_AI_API_KEY not set")
 	}
 
-	// Create provider configuration
-	provider := LLMProvider{
-		ProviderName: providerName,
-		BaseURL:      baseURL,
-		APIKey:       apiKey,
-		ModelName:    modelName,
-		Metadata:     make(map[string]string),
-	}
-
-	// Create MCP settings
-	mcpSettings := &MCPSettings{
-		ConfigFile:    configFile,
+	// ── 3. build service settings ────────────────────────────────────────────
+	set := &MCPSettings{
+		ConfigFile:    cfgFile,
 		SystemPrompt:  systemPrompt,
-		MessageWindow: messageWindow,
-		Provider:      provider,
-		DebugMode:     true, // Always enable debug for tests
+		MessageWindow: 10,
+		Provider: LLMProvider{
+			ProviderName: providerName,
+			BaseURL:      baseURL,
+			APIKey:       apiKey,
+			ModelName:    modelName,
+			Metadata:     map[string]string{},
+		},
+		DebugMode: true,
 	}
+	logger.Info("constructed MCPSettings", "config", pp(set))
 
-	// Create MCP service instance
-	service, err := NewMCPService(mcpSettings)
+	// ── 4. init service ──────────────────────────────────────────────────────
+	svc, err := NewMCPService(set)
 	if err != nil {
-		t.Fatalf("Failed to create MCP service: %v", err)
+		t.Fatalf("NewMCPService: %v", err)
 	}
+	logger.Debug("NewMCPService done")
 
-	t.Run("Test MCP Search", func(t *testing.T) {
-		// Test query
-		query := "What is the capital of France?"
+	if err := svc.InitializeClients(); err != nil {
+		t.Fatalf("InitializeClients: %v", err)
+	}
+	logger.Debug("InitializeClients done", "toolCount", len(svc.tools))
 
-		fmt.Println("Sending query to MCP service:", query)
-		response, err := service.Search(query)
-		if err != nil {
-			t.Errorf("Search failed: %v", err)
+	// ── 5. start prompt loop (async) ─────────────────────────────────────────
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.StartPromptLoop(ctx)
+	logger.Debug("prompt loop started")
+
+	/* utility waits for EventFinalResult, logging all events in-between */
+	waitForAnswer := func(q string) (history.HistoryMessage, error) {
+		logger.Info("sending prompt", "query", q)
+		if err := svc.Search(q); err != nil {
+			return history.HistoryMessage{}, err
 		}
-		if response == nil {
-			t.Error("Expected non-nil response")
-		}
 
-		fmt.Println("\n========== MCP Response ==========")
-		fmt.Printf("Raw Response: %s\n", printJSON(response))
-		fmt.Println("==================================")
-
-		if response.Content == "" {
-			t.Error("Expected non-empty content in response")
-		}
-	})
-
-	t.Run("Test MCP File Query", func(t *testing.T) {
-		// Test file-related query
-		query := "How many tables are in the database and its name and also list all the files and folders you have access?"
-
-		fmt.Println("\nSending file query to MCP service:", query)
-		response, err := service.Search(query)
-
-		fmt.Println("\n========== MCP File Query Response ==========")
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			// Don't fail the test, just report the error
-			t.Logf("File search query failed with error: %v", err)
-		} else if response == nil {
-			fmt.Println("Response: <nil>")
-			t.Log("Received nil response without error")
-		} else {
-			fmt.Printf("Raw Response: %s\n", printJSON(response))
-
-			if response.Content == "" {
-				t.Log("Response content was empty")
-			} else {
-				t.Log("Received valid response content")
+		timeout := time.After(45 * time.Second)
+		for {
+			select {
+			case ev := <-svc.EventChan:
+				logger.Debug("got PromptEvent", "type", ev.Type)
+				switch ev.Type {
+				case EventError:
+					return history.HistoryMessage{}, fmt.Errorf("backend error: %v", ev.Data)
+				case EventFinalResult:
+					return ev.Data.(history.HistoryMessage), nil
+				}
+			case <-timeout:
+				return history.HistoryMessage{}, fmt.Errorf("timeout waiting for final_result")
 			}
 		}
-		fmt.Println("=============================================")
+	}
+
+	// ── 6. run sub-test ──────────────────────────────────────────────────────
+	t.Run("file-query", func(t *testing.T) {
+		msg, err := waitForAnswer("How many tables are there in the database?")
+		if err != nil {
+			t.Fatalf("waitForAnswer: %v", err)
+		}
+		logger.Info("assistant final reply", "content", pp(msg))
+
+		if len(msg.Content) == 0 {
+			t.Fatalf("empty content in final_result")
+		}
 	})
 }

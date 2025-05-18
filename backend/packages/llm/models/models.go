@@ -67,3 +67,4 @@ type Provider interface {
 type MCPResponse struct {
 	Content string `json:"content"`
 }
+

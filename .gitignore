@@ -53,6 +53,7 @@ public/
 .env
 .env.local
 .env.*.local
+.env.prod
 
 # Cache
 .cache/
@@ -60,3 +61,5 @@ public/
 
 # Temporary files and output of Wails
 wails/
+example_*/
+tmp/

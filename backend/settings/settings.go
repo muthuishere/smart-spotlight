@@ -11,6 +11,15 @@ import (
 // AppSettings holds the current application settings instance
 var AppSettings *Settings
 
+// GetEnvWithDefault returns the value of an environment variable or a default value if it's not set
+func GetEnvWithDefault(key, defaultValue string) string {
+	value, exists := os.LookupEnv(key)
+	if !exists {
+		return defaultValue
+	}
+	return value
+}
+
 // InitSettings initializes the application settings
 func InitSettings() {
 	var err error

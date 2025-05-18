@@ -1,5 +1,10 @@
-import { LogInfo } from "../../wailsjs/runtime/runtime";
 
+import {
+  WindowHide,
+  WindowSetSize,
+  LogInfo,
+
+} from "../../wailsjs/runtime";
 // Hardcoded window configurations
 const WINDOW_CONFIG = {
   default: {
@@ -56,3 +61,32 @@ export async function getWindowSize({
     height
   };
 }
+
+export  function getDefaultWindowSize() {
+  // 
+  return {
+    width: WINDOW_CONFIG.default.width,
+    height:WINDOW_CONFIG.default.minHeight
+  };
+}
+
+export const resizeForError = async () => {
+    const { width, height } = await getWindowSize({ hasError: true });
+    await WindowSetSize(width, height);
+  };
+
+  export const resizeForResponse = async () => {
+    const { width, height } = await getWindowSize({ hasResponse: true });
+    await WindowSetSize(width, height);
+  };
+
+
+  export const resizeForSuggestions = async () => {
+    const { width, height } = await getWindowSize({ hasSuggestions: true });
+    await WindowSetSize(width, height);
+  };
+
+  export const resizeToDefault = async () => {
+    const { width, height } =  getDefaultWindowSize();
+    await WindowSetSize(width, height);
+  };

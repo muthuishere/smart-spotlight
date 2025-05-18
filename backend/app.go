@@ -5,10 +5,15 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"path/filepath"
+
 	"smart-spotlight-wails/backend/history"
 	"smart-spotlight-wails/backend/keybind"
 	"smart-spotlight-wails/backend/llm"
+	"smart-spotlight-wails/backend/llm/mcphost"
+
+	llmhistory "smart-spotlight-wails/backend/packages/llm/history"
 	"smart-spotlight-wails/backend/settings"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -23,6 +28,7 @@ type App struct {
 	startupComplete bool
 	historyService  *history.Service
 	llmService      *llm.Service
+	mcpService      *mcphost.MCPService
 }
 
 // NewApp creates a new App application struct
@@ -71,6 +77,11 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	a.llmService = llm.NewService(settings.GetCurrentSettings())
+
+	// Initialize MCP service
+	if err := a.initializeMCPService(); err != nil {
+		log.Printf("Error initializing MCP service: %v", err)
+	}
 
 	// Setup global shortcut
 	a.setupGlobalShortcut()
@@ -140,6 +151,21 @@ func (a *App) SearchWithLLM(query string) (*llm.ChatResponse, error) {
 	return a.llmService.Search(query)
 }
 
+// SearchWithMCP performs a search using the MCP service
+func (a *App) SearchWithMCP(query string) error {
+	if a.mcpService == nil {
+		return fmt.Errorf("MCP service is not initialized")
+	}
+
+	// Add query to history
+	if err := a.historyService.AddToHistory(query); err != nil {
+		log.Printf("Error adding to history: %v", err)
+	}
+
+	// Perform search using MCP service
+	return a.mcpService.Search(query)
+}
+
 // GetSearchHistory returns the search history
 func (a *App) GetSearchHistory(prefix string) []history.SearchHistory {
 	return a.historyService.GetSearchHistory(prefix)
@@ -152,4 +178,108 @@ func (a *App) TestAPIConnection() error {
 
 func (a *App) IsStartupComplete() bool {
 	return a.startupComplete
+}
+
+// initializeMCPService initializes the MCP service with configurations from environment variables
+func (a *App) initializeMCPService() error {
+	// Load configuration from environment variables
+	providerName := settings.GetEnvWithDefault("SPOT_AI_PROVIDER", "openai")
+	baseURL := settings.GetEnvWithDefault("SPOT_AI_API_ENDPOINT", "")
+	apiKey := settings.GetEnvWithDefault("SPOT_AI_API_KEY", "")
+	modelName := settings.GetEnvWithDefault("SPOT_AI_MODEL", "gpt-4o")
+	systemPrompt := settings.GetEnvWithDefault("SPOT_AI_SYSTEM_PROMPT", "")
+	configFile := settings.GetEnvWithDefault("SPOT_AI_CONFIG_FILE", "")
+
+	// Default to 10 if not specified
+	messageWindow := 10
+
+	// Skip initialization if API key is not provided
+	if apiKey == "" {
+		log.Printf("Warning: SPOT_AI_API_KEY not set, MCP service will not be initialized")
+		return nil
+	}
+
+	// Create provider configuration
+	provider := mcphost.LLMProvider{
+		ProviderName: providerName,
+		BaseURL:      baseURL,
+		APIKey:       apiKey,
+		ModelName:    modelName,
+		Metadata:     make(map[string]string),
+	}
+
+	debugMode := settings.GetEnvWithDefault("SPOT_AI_DEBUG", "true")
+	debugModeBool := debugMode == "true"
+	// Create MCP settings
+	mcpSettings := &mcphost.MCPSettings{
+		ConfigFile:    configFile,
+		SystemPrompt:  systemPrompt,
+		MessageWindow: messageWindow,
+		Provider:      provider,
+		DebugMode:     debugModeBool, // Use app's debug setting
+	}
+
+	// Create MCP service instance
+	var err error
+	a.mcpService, err = mcphost.NewMCPService(a.ctx, mcpSettings)
+	if err != nil {
+		return fmt.Errorf("failed to create MCP service: %w", err)
+	}
+
+	if err := a.mcpService.InitializeClients(); err != nil {
+		return fmt.Errorf("failed to init MCP clients: %w", err)
+	}
+
+	// 2. start the background loop so InputChan has a receiver
+	a.mcpService.StartPromptLoop(a.ctx)
+
+	// backend/app.go  (inside initializeMCPService – replace the forwarder)
+
+	go func() {
+		for ev := range a.mcpService.EventChan {
+
+			// make a browser-friendly copy
+			out := map[string]interface{}{
+				"Type": ev.Type,
+			}
+
+			switch ev.Type {
+
+			case mcphost.EventFinalResult:
+				// extract plain markdown
+				if msg, ok := ev.Data.(llmhistory.HistoryMessage); ok {
+					txt := ""
+					for _, b := range msg.Content {
+						if b.Type == "text" {
+							txt = b.Text
+							break
+						}
+					}
+					out["Data"] = txt
+				}
+
+			case mcphost.EventToolUse,
+				mcphost.EventToolResult,
+				mcphost.EventAuthorization,
+				mcphost.EventConfirmationRequired:
+				out["Data"] = ev.Data // these are already maps / strings
+
+			case mcphost.EventError:
+				out["Data"] = fmt.Sprintf("%v", ev.Data)
+			}
+
+			slog.Info("Emit to frontend", "payload", out)
+			a.mcpService.EmitPublic("PromptEvent", ev.Type, out)
+			// runtime.EventsEmit(a.ctx, "PromptEvent", out)
+		}
+	}()
+
+	return nil
+}
+
+func (a *App) ConfirmTool(token string, ok bool) error {
+	if a.mcpService != nil {
+		a.mcpService.Confirm(token, ok)
+	}
+	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"smart-spotlight-wails/backend/packages/llm/models"
 
 	"strings"
@@ -106,13 +105,10 @@ func loadMCPConfig(settings *MCPSettings) (*MCPConfig, error) {
 	if settings.ConfigFile != "" {
 		configPath = settings.ConfigFile
 	} else {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("error getting home directory: %w", err)
-		}
-		configPath = filepath.Join(homeDir, ".mcp.json")
+		return nil, fmt.Errorf("config file not specified")
 	}
 
+	fmt.Println("Loading MCP config from:", configPath)
 	// Check if config file exists
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		// Return empty config without creating a file

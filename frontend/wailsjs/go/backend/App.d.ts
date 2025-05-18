@@ -5,6 +5,8 @@ import {settings} from '../models';
 import {llm} from '../models';
 import {context} from '../models';
 
+export function ConfirmTool(arg1:string,arg2:boolean):Promise<void>;
+
 export function GetSearchHistory(arg1:string):Promise<Array<history.SearchHistory>>;
 
 export function GetSettings():Promise<settings.Settings>;
@@ -14,6 +16,8 @@ export function Greet(arg1:string):Promise<string>;
 export function IsStartupComplete():Promise<boolean>;
 
 export function SearchWithLLM(arg1:string):Promise<llm.ChatResponse>;
+
+export function SearchWithMCP(arg1:string):Promise<void>;
 
 export function SetVersion(arg1:string):Promise<void>;
 

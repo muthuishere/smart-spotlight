@@ -10,6 +10,7 @@ function SearchInput({ value, onChange, onSearch, placeholder = "Search...", isL
   const [suggestions, setSuggestions] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const inputRef = useRef(null);
+  const userInteractedRef = useRef(false); // Track if user has interacted with input
 
   // Focus input on mount and when window gains focus
   useEffect(() => {
@@ -41,6 +42,7 @@ function SearchInput({ value, onChange, onSearch, placeholder = "Search...", isL
     if (isLoading || hasResponse) {
       setSuggestions([]);
       setSelectedIndex(-1);
+      userInteractedRef.current = false; // Reset interaction flag
       onSuggestionsVisibilityChange?.(false);
     }
   }, [isLoading, hasResponse, onSuggestionsVisibilityChange]);
@@ -51,8 +53,8 @@ function SearchInput({ value, onChange, onSearch, placeholder = "Search...", isL
       return (query) => {
         if (timeout) clearTimeout(timeout);
         timeout = setTimeout(async () => {
-          // Only fetch suggestions if there's no response showing
-          if (query.trim() && !isLoading && !hasResponse) {
+          // Only fetch suggestions if user has interacted and there's no response showing
+          if (userInteractedRef.current && query.trim() && !isLoading && !hasResponse) {
             try {
               const history = await GetSearchHistory(query);
               setSuggestions(history || []);
@@ -73,6 +75,8 @@ function SearchInput({ value, onChange, onSearch, placeholder = "Search...", isL
   }, [value, debouncedFetchSuggestions]);
 
   const handleKeyDown = (e) => {
+    userInteractedRef.current = true; // User is interacting with keyboard
+    
     if (e.key === 'Escape') {
       e.preventDefault();
       WindowHide();
@@ -105,6 +109,7 @@ function SearchInput({ value, onChange, onSearch, placeholder = "Search...", isL
   };
 
   const handleInputChange = (e) => {
+    userInteractedRef.current = true; // User is changing input
     onChange(e);
     setSelectedIndex(-1);
   };

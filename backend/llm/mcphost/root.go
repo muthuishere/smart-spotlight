@@ -12,75 +12,48 @@ import (
 	"smart-spotlight-wails/backend/packages/llm/providers/google"
 	"smart-spotlight-wails/backend/packages/llm/providers/ollama"
 	"smart-spotlight-wails/backend/packages/llm/providers/openai"
-
 	"strings"
 	"time"
 
-	mcpclient "github.com/mark3labs/mcp-go/client"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"github.com/google/uuid"
+
 	"github.com/mark3labs/mcp-go/mcp"
-)
-
-var (
-	configFile       string
-	systemPromptFile string
-	messageWindow    int
-	modelFlag        string
-	openaiBaseURL    string
-	anthropicBaseURL string
-	openaiAPIKey     string
-	anthropicAPIKey  string
-	googleAPIKey     string
-)
-
-const (
-	initialBackoff = 1 * time.Second
-	maxBackoff     = 30 * time.Second
-	maxRetries     = 5
 )
 
 func createProvider(ctx context.Context, settings *MCPSettings) (models.Provider, error) {
 	providerName := settings.Provider.ProviderName
 	modelName := settings.Provider.ModelName
 	systemPrompt := settings.SystemPrompt
+	apiKey := settings.Provider.APIKey
+
+	if apiKey == "" {
+		return nil, fmt.Errorf(
+			" API key not provided  variable",
+		)
+	}
 
 	// Use the provider configuration
 	switch providerName {
 	case "openai":
-		apiKey := settings.Provider.APIKey
+		slog.Info("Creating OpenAI provider")
 
-		if apiKey == "" {
-			return nil, fmt.Errorf(
-				"OpenAI API key not provided for provider %s", providerName,
-			)
-		}
 		return openai.NewProvider(apiKey, settings.Provider.BaseURL, modelName, systemPrompt), nil
 
 	// You can add more provider types here as needed
 	case "anthropic":
-		apiKey := anthropicAPIKey
-		if apiKey == "" {
-			apiKey = os.Getenv("ANTHROPIC_API_KEY")
-		}
 
-		if apiKey == "" {
-			return nil, fmt.Errorf(
-				"Anthropic API key not provided. Use --anthropic-api-key flag or ANTHROPIC_API_KEY environment variable",
-			)
-		}
+		slog.Info("Creating Anthropic provider")
 		return anthropic.NewProvider(apiKey, settings.Provider.BaseURL, modelName, systemPrompt), nil
 
 	case "ollama":
+		slog.Info("Creating Ollama provider")
 		return ollama.NewProvider(modelName, systemPrompt)
 
 	case "google":
-		apiKey := googleAPIKey
-		if apiKey == "" {
-			apiKey = os.Getenv("GOOGLE_API_KEY")
-		}
-		if apiKey == "" {
-			// The project structure is provider specific, but Google calls this GEMINI_API_KEY in e.g. AI Studio. Support both.
-			apiKey = os.Getenv("GEMINI_API_KEY")
-		}
+		slog.Info("Creating Google provider")
+
 		return google.NewProvider(ctx, apiKey, modelName, systemPrompt)
 
 	default:
@@ -88,38 +61,8 @@ func createProvider(ctx context.Context, settings *MCPSettings) (models.Provider
 	}
 }
 
-// LLMProvider represents a single LLM provider configuration
-type LLMProvider struct {
-	ProviderName string
-	BaseURL      string
-	APIKey       string
-	ModelName    string
-	Metadata     map[string]string // Flexible metadata for provider-specific settings
-}
-
-// MCPSettings represents the MCP configuration settings
-type MCPSettings struct {
-	ConfigFile    string
-	SystemPrompt  string // Actual system prompt content
-	MessageWindow int
-	Provider      LLMProvider // Single provider configuration
-	DebugMode     bool
-}
-
-// MCPService handles MCP operations
-type MCPService struct {
-	settings       *MCPSettings
-	provider       models.Provider
-	mcpClients     map[string]mcpclient.MCPClient
-	tools          []models.Tool
-	logger         *slog.Logger
-	initialBackoff time.Duration
-	maxBackoff     time.Duration
-	maxRetries     int
-}
-
 // NewMCPService creates a new MCP service
-func NewMCPService(settings *MCPSettings) (*MCPService, error) {
+func NewMCPService(ctx context.Context, settings *MCPSettings) (*MCPService, error) {
 	if settings == nil {
 		return nil, fmt.Errorf("settings cannot be nil")
 	}
@@ -163,273 +106,363 @@ func NewMCPService(settings *MCPSettings) (*MCPService, error) {
 	}
 
 	return &MCPService{
+		ctx:            ctx,
 		settings:       settings,
 		provider:       provider,
 		logger:         logger,
 		initialBackoff: initialBackoff,
 		maxBackoff:     maxBackoff,
 		maxRetries:     maxRetries,
+		waitingConfirm: false,
+		InputChan:      make(chan PromptEvent),
+		EventChan:      make(chan PromptEvent),
+		ConfirmChan:    make(chan confirmationReply),
 	}, nil
 }
 
-// Search performs a search using the configured MCP provider
-func (s *MCPService) Search(query string) (*models.MCPResponse, error) {
-	ctx := context.Background()
+// handleDirectFollowUp creates a direct follow-up prompt with tool results
+
+func (s *MCPService) emit(ev PromptEvent) {
+	if s.waitingConfirm && ev.Type != EventConfirmationRequired {
+		// suppress everything except the confirmation itself
+		return
+	}
+	s.EventChan <- ev
+}
+
+func (s *MCPService) Search(query string) error {
+	s.logger.Info("Search request received",
+		"query", query,
+		"timestamp", time.Now().Format(time.RFC3339),
+		"provider", s.settings.Provider.ProviderName,
+		"model", s.settings.Provider.ModelName)
+
+	// Log query characteristics
+	s.logger.Debug("Query details",
+		"query_length", len(query),
+		"query_words", len(strings.Fields(query)))
+
+	// Log channel state
+	s.logger.Debug("Sending event to input channel",
+		"channel_cap", cap(s.InputChan),
+		"event_type", EventPrompt)
+
+	// Create and send the event
+	event := PromptEvent{Type: EventPrompt, Data: query}
+
+	// Try to send with timeout to detect potential deadlocks
+	select {
+	case s.InputChan <- event:
+		s.logger.Debug("Event successfully sent to input channel")
+	case <-time.After(100 * time.Millisecond):
+		s.logger.Warn("Channel send operation taking longer than expected, proceeding anyway")
+		s.InputChan <- event
+	}
+
+	s.logger.Info("Search request queued successfully",
+		"query_id", fmt.Sprintf("%x", time.Now().UnixNano()))
+
+	return nil
+}
+
+func (s *MCPService) StartPromptLoop(ctx context.Context) {
 	messages := make([]history.HistoryMessage, 0)
 
-	// Initialize MCP clients if not already done
-	if s.mcpClients == nil {
-		mcpConfig, err := loadMCPConfig(s.settings)
-		if err != nil {
-			return nil, fmt.Errorf("error loading MCP config: %w", err)
-		}
-
-		clients, err := createMCPClients(mcpConfig)
-		if err != nil {
-			return nil, fmt.Errorf("error creating MCP clients: %w", err)
-		}
-		s.mcpClients = clients
-
-		var allTools []models.Tool
-		for serverName, mcpClient := range s.mcpClients {
-			toolsResult, err := mcpClient.ListTools(ctx, mcp.ListToolsRequest{})
-			if err != nil {
-				s.logger.Error("error fetching tools",
-					"server", serverName,
-					"error", err)
-				continue
+	go func() {
+		for {
+			if err := s.RunPromptWithChannels(ctx, &messages); err != nil {
+				s.logger.Error("prompt execution failed", "error", err)
+				s.emit(PromptEvent{Type: EventError, Data: err.Error()})
 			}
-			serverTools := mcpToolsToAnthropicTools(serverName, toolsResult.Tools)
-			allTools = append(allTools, serverTools...)
-			s.logger.Info("tools loaded",
-				"server", serverName,
-				"count", len(toolsResult.Tools))
 		}
-		s.tools = allTools
+	}()
+}
+
+func (s *MCPService) InitializeClients() error {
+	config, err := loadMCPConfig(s.settings)
+	if err != nil {
+		return err
 	}
 
-	// Add user message to history
-	messages = append(messages, history.HistoryMessage{
-		Role: "user",
-		Content: []history.ContentBlock{{
-			Type: "text",
-			Text: query,
-		}},
-	})
-
-	// Convert slice of HistoryMessage to slice of Message interface
-	var llmMessages []models.Message
-	for i := range messages {
-		llmMessages = append(llmMessages, &messages[i])
+	clients, err := createMCPClients(config)
+	if err != nil {
+		return err
 	}
 
-	// Create message with retries for overloaded scenarios
-	var message models.Message
-	var err error
-	backoff := s.initialBackoff
-	retries := 0
+	s.mcpClients = clients
+	s.tools = []models.Tool{}
 
-	for {
-		message, err = s.provider.CreateMessage(ctx, query, llmMessages, s.tools)
+	for name, client := range clients {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		toolsResult, err := client.ListTools(ctx, mcp.ListToolsRequest{})
 		if err != nil {
-			// For debugging, print more details about the error
-			s.logger.Error("Error creating message",
-				"error", err,
-				"query", query)
-
-			// Check if it's an overloaded error
-			if strings.Contains(err.Error(), "overloaded_error") {
-				if retries >= s.maxRetries {
-					return nil, fmt.Errorf("service is currently overloaded, please try again later")
-				}
-
-				s.logger.Warn("Service is overloaded, backing off...",
-					"attempt", retries+1,
-					"backoff", backoff.String())
-
-				time.Sleep(backoff)
-				backoff *= 2
-				if backoff > s.maxBackoff {
-					backoff = s.maxBackoff
-				}
-				retries++
-				continue
-			}
-			// If it's not an overloaded error, return immediately
-			return nil, fmt.Errorf("error creating message: %w", err)
-		}
-		break
-	}
-
-	response := &models.MCPResponse{
-		Content: message.GetContent(),
-	}
-
-	// Store the initial response message in history
-	var messageContent []history.ContentBlock
-	if message.GetContent() != "" {
-		messageContent = append(messageContent, history.ContentBlock{
-			Type: "text",
-			Text: message.GetContent(),
-		})
-	} else {
-		// Ensure we always have content, even if it's minimal
-		// This prevents null content in the message history
-		messageContent = append(messageContent, history.ContentBlock{
-			Type: "text",
-			Text: "I'll help with that.",
-		})
-	}
-
-	// Collect all tool results before generating a follow-up message
-	toolResults := []history.ContentBlock{}
-	toolCalls := message.GetToolCalls()
-
-	// If there are no tool calls, we can return the response as is
-	if len(toolCalls) == 0 {
-		if len(messageContent) > 0 {
-			messages = append(messages, history.HistoryMessage{
-				Role:    message.GetRole(),
-				Content: messageContent,
-			})
-		}
-		return response, nil
-	}
-
-	// Process all tool calls and collect their results
-	for _, toolCall := range toolCalls {
-		s.logger.Info("using tool",
-			"name", toolCall.GetName(),
-			"arguments", toolCall.GetArguments())
-
-		parts := strings.Split(toolCall.GetName(), "__")
-		if len(parts) != 2 {
-			s.logger.Error("invalid tool name format", "name", toolCall.GetName())
-			continue // Skip this tool call but continue with others
-		}
-
-		serverName, toolName := parts[0], parts[1]
-		mcpClient, ok := s.mcpClients[serverName]
-		if !ok {
-			s.logger.Error("server not found", "server", serverName)
-			continue // Skip this tool call but continue with others
-		}
-
-		req := mcp.CallToolRequest{}
-		req.Params.Name = toolName
-		req.Params.Arguments = toolCall.GetArguments()
-
-		toolResult, err := mcpClient.CallTool(ctx, req)
-		if err != nil {
-			s.logger.Error("Tool call failed",
-				"tool", toolName,
-				"error", err,
-				"arguments", toolCall.GetArguments())
-
-			// Instead of failing, add error as a tool result and continue
-			errMsg := fmt.Sprintf("Error calling tool %s: %v", toolName, err)
-			toolResults = append(toolResults, history.ContentBlock{
-				Type:      "tool_result",
-				ToolUseID: toolCall.GetID(),
-				Text:      errMsg,
-				Content: []interface{}{
-					map[string]interface{}{
-						"type": "text",
-						"text": errMsg,
-					},
-				},
-			})
+			s.logger.Error("failed to fetch tools", "server", name, "error", err)
 			continue
 		}
+		s.tools = append(s.tools, mcpToolsToAnthropicTools(name, toolsResult.Tools)...)
+	}
+	return nil
+}
 
-		// Print the raw tool result for debugging
-		resultJSON, _ := json.MarshalIndent(toolResult, "", "  ")
-		s.logger.Info("Tool result",
-			"tool", toolName,
-			"result", string(resultJSON))
+func (s *MCPService) RunPromptWithChannels(
+	ctx context.Context,
+	messages *[]history.HistoryMessage,
+) error {
+	evt := <-s.InputChan
+	if evt.Type != EventPrompt {
+		return nil
+	}
+	prompt := evt.Data.(string)
+	*messages = append(*messages,
+		history.HistoryMessage{Role: "user",
+			Content: []history.ContentBlock{{Type: "text", Text: prompt}}})
 
-		if toolResult.Content != nil {
-			// Create the tool result block
-			var resultText string
-			for _, item := range toolResult.Content {
-				if contentMap, ok := item.(mcp.TextContent); ok {
-					resultText += fmt.Sprintf("%v ", contentMap.Text)
-				}
-			}
+	return s.runLLMWithToolCycle(ctx, prompt, messages)
+}
 
-			resultText = strings.TrimSpace(resultText)
-			toolResults = append(toolResults, history.ContentBlock{
-				Type:      "tool_result",
-				ToolUseID: toolCall.GetID(),
-				Content:   toolResult.Content,
-				Text:      resultText,
-			})
-		}
+// runLLMWithToolCycle makes one provider call, executes tool calls,
+// inserts `tool_result` messages, and (if tools were used) recurses once
+// with an empty prompt so the LLM can craft the final answer.
+func (s *MCPService) runLLMWithToolCycle(
+	ctx context.Context,
+	prompt string,
+	messages *[]history.HistoryMessage,
+) error {
+
+	/* ─ 1. Optional pruning ───────────────────────────────────────────── */
+	if win := s.settings.MessageWindow; win > 0 {
+		*messages = pruneMessages(*messages, win)
 	}
 
-	// Add the initial message to the history
-	messages = append(messages, history.HistoryMessage{
-		Role:    message.GetRole(),
-		Content: messageContent,
+	/* ─ 2. Adapt history to models.Message ───────────────────────────── */
+	llmMsgs := make([]models.Message, len(*messages))
+	for i := range *messages {
+		llmMsgs[i] = &(*messages)[i]
+	}
+
+	/* ─ 3. Provider call ─────────────────────────────────────────────── */
+	msg, err := s.provider.CreateMessage(ctx, prompt, llmMsgs, s.tools)
+	if err != nil {
+		s.emit(PromptEvent{Type: EventError, Data: err.Error()})
+		return nil
+	}
+
+	/* ─ 4. Gather assistant text + tool_use blocks  ──────────────────── */
+	var assistantBlocks []history.ContentBlock
+	if txt := msg.GetContent(); txt != "" {
+		assistantBlocks = append(assistantBlocks,
+			history.ContentBlock{Type: "text", Text: txt})
+	}
+	for _, call := range msg.GetToolCalls() {
+		rawArgs, _ := json.Marshal(call.GetArguments())
+		assistantBlocks = append(assistantBlocks,
+			history.ContentBlock{Type: "tool_use", ID: call.GetID(),
+				Name: call.GetName(), Input: rawArgs})
+	}
+
+	/* ─ 5. ✨ Append assistant message BEFORE tool results  ───────────── */
+	*messages = append(*messages, history.HistoryMessage{
+		Role:    msg.GetRole(), // "assistant"
+		Content: assistantBlocks,
 	})
 
-	// Add all tool results to history
-	for _, toolResult := range toolResults {
-		messages = append(messages, history.HistoryMessage{
+	/* ─ 6. Execute each tool call & append tool_result message ───────── */
+	for _, call := range msg.GetToolCalls() {
+		parts := strings.Split(call.GetName(), "__")
+		if len(parts) != 2 {
+			s.emit(PromptEvent{Type: EventError, Data: "invalid tool name format"})
+			continue
+		}
+		server, tool := parts[0], parts[1]
+
+		args := call.GetArguments() // map[string]any
+
+		if need, token := s.confirmationRequired(server, tool, args); need {
+			s.waitingConfirm = true
+			argJSON, _ := json.MarshalIndent(args, "", "  ")
+
+			s.EventChan <- PromptEvent{
+				Type: EventConfirmationRequired,
+				Data: map[string]any{
+					"token":  token,
+					"server": server,
+					"tool":   tool,
+					"args":   string(argJSON),
+				},
+			}
+
+			// wait…
+			select {
+			case reply := <-s.ConfirmChan:
+				s.waitingConfirm = false
+				if reply.Token != token {
+					// ignore mismatched confirmations (rare)
+					continue
+				}
+				if !reply.OK {
+					s.emit(PromptEvent{
+						Type: EventError,
+						Data: "operation aborted by user",
+					})
+					return nil
+				}
+				// user confirmed, continue
+			case <-time.After(120 * time.Second):
+				s.waitingConfirm = false
+				s.emit(PromptEvent{
+					Type: EventError,
+					Data: "confirmation timeout",
+				})
+				return nil
+			}
+		}
+
+		client := s.mcpClients[server]
+
+		req := mcp.CallToolRequest{}               // zero-value struct
+		req.Params.Name = tool                     // e.g. "list_tables"
+		req.Params.Arguments = call.GetArguments() // map[string]any
+
+		toolStart := time.Now()
+		res, err := client.CallTool(ctx, req)
+		toolMS := time.Since(toolStart).Milliseconds()
+
+		slog.Debug("tool call",
+			"server", server,
+			"tool", tool,
+			"args", call.GetArguments(),
+			"duration_ms", toolMS,
+			"response", res,
+			"error", err,
+			"timestamp", time.Now().Format(time.RFC3339))
+
+		// Execute tool
+		// res, err := client.CallTool(ctx, mcp.CallToolRequest{
+		// 	Params: mcp.ToolParams{Name: tool, Arguments: call.GetArguments()},
+		// })
+		if err != nil {
+			s.emit(PromptEvent{Type: EventError, Data: err.Error()})
+			return nil
+		}
+
+		// Build tool_result block
+		tr := history.ContentBlock{
+			Type:      "tool_result",
+			ToolUseID: call.GetID(),
+			Content:   res.Content,
+		}
+		for _, it := range res.Content {
+			if t, ok := it.(mcp.TextContent); ok {
+				tr.Text = t.Text
+				break
+			}
+		}
+
+		// Append as its own `tool` message
+		*messages = append(*messages, history.HistoryMessage{
 			Role:    "tool",
-			Content: []history.ContentBlock{toolResult},
+			Content: []history.ContentBlock{tr},
 		})
 	}
 
-	// If we have tool results, make another call to get LLM's response to all tool results
-	if len(toolResults) > 0 {
-		// Instead of trying complex approaches that are failing, let's create a simple, direct follow-up
-		// that just includes the original question and the tool results in a clear format
+	/* ─ 7. Recurse once (if any tool was used) otherwise emit final ──── */
+	if len(msg.GetToolCalls()) > 0 {
+		return s.runLLMWithToolCycle(ctx, "", messages)
+	}
 
-		// Extract text from all tool results
-		var toolResultsText string
-		for _, result := range toolResults {
-			toolResultsText += result.Text + "\n"
-		}
+	final := (*messages)[len(*messages)-1] // last assistant message
+	s.emit(PromptEvent{Type: EventFinalResult, Data: final})
+	return nil
+}
 
-		// Create a completely new conversation with clear context
-		directPrompt := fmt.Sprintf("I asked: %s\n\nTool results:\n%s\n\nPlease provide a complete answer based on these results.",
-			query, toolResultsText)
+func (s *MCPService) Confirm(token string, ok bool) {
+	s.ConfirmChan <- confirmationReply{Token: token, OK: ok}
+}
 
-		s.logger.Info("Making direct follow-up call",
-			"prompt", directPrompt)
+func (s *MCPService) EmitPublic(evtname string, evtType, out any) {
 
-		// Create a new, clean history with just this prompt
-		directMessages := []history.HistoryMessage{
-			{
-				Role: "user",
-				Content: []history.ContentBlock{{
-					Type: "text",
-					Text: directPrompt,
-				}},
-			},
-		}
+	if s.waitingConfirm && evtType != EventConfirmationRequired {
+		// suppress everything except the confirmation itself
+		return
+	}
 
-		// Convert to LLM messages
-		directLLMMessages := make([]models.Message, len(directMessages))
-		for i := range directMessages {
-			directLLMMessages[i] = &directMessages[i]
-		}
+	runtime.EventsEmit(s.ctx, evtname, out)
+}
 
-		// Make direct call without tools to avoid any tool-related formatting issues
-		directResponse, err := s.provider.CreateMessage(ctx, directPrompt, nil, nil)
-		if err != nil {
-			s.logger.Error("Direct follow-up failed",
-				"error", err)
+// -----------------------------------------------------------------------------
+// Confirmation hook (stub)
+// -----------------------------------------------------------------------------
 
-			// Fall back to showing raw tool results
-			response.Content = fmt.Sprintf("Tool results:\n\n%s", strings.TrimSpace(toolResultsText))
-		} else {
-			// Use the direct response
-			s.logger.Info("Direct follow-up succeeded")
-			response.Content = directResponse.GetContent()
+func (s *MCPService) confirmationRequired(
+	server string,
+	tool string,
+	args map[string]any, // full argument map
+) (bool, string) {
+
+	// 1. quick check on tool name
+	if writeActionRe.MatchString(tool) {
+		return true, uuid.NewString()
+	}
+
+	// 2. stringify *all* argument values and search again
+	if writeActionRe.MatchString(fmt.Sprintf("%v", args)) {
+		return true, uuid.NewString()
+	}
+
+	// nothing suspicious
+	return false, ""
+}
+
+// -----------------------------------------------------------------------------
+// Context pruning (unchanged)
+// -----------------------------------------------------------------------------
+
+func pruneMessages(msgs []history.HistoryMessage, window int) []history.HistoryMessage {
+	if len(msgs) <= window {
+		return msgs
+	}
+
+	pruned := msgs[len(msgs)-window:]
+	useIDs := map[string]bool{}
+	resIDs := map[string]bool{}
+
+	for _, m := range pruned {
+		for _, b := range m.Content {
+			if b.Type == "tool_use" {
+				useIDs[b.ID] = true
+			} else if b.Type == "tool_result" {
+				resIDs[b.ToolUseID] = true
+			}
 		}
 	}
 
-	return response, nil
+	filtered := make([]history.HistoryMessage, 0, len(pruned))
+	for _, m := range pruned {
+		var blocks []history.ContentBlock
+		for _, b := range m.Content {
+			keep := true
+			if b.Type == "tool_use" {
+				keep = resIDs[b.ID]
+			} else if b.Type == "tool_result" {
+				keep = useIDs[b.ToolUseID]
+			}
+			if keep {
+				blocks = append(blocks, b)
+			}
+		}
+		if len(blocks) > 0 || m.Role != "assistant" {
+			m.Content = blocks
+			filtered = append(filtered, m)
+		}
+	}
+	return filtered
+}
+
+func truncateString(s string, maxLength int) string {
+	if len(s) > maxLength {
+		return s[:maxLength] + "..."
+	}
+	return s
 }
