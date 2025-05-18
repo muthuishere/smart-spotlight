@@ -14,7 +14,7 @@ frontend/node_modules
 # Wails build output
 
 wails-build/
-*.json
+mcp.json
 *.csv
 # Go build artifacts
 *.exe
