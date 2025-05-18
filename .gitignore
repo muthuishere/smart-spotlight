@@ -43,7 +43,6 @@ Thumbs.db
 *.iml
 
 # Go specific files
-*.mod
 *.sum
 
 # Frontend specific build output
