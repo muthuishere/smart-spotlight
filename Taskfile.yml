@@ -50,13 +50,13 @@ tasks:
 
   test-llm:
     desc: Run LLM integration tests
-    dotenv: ['.env.test']  # Override default dotenv for this specific task
+    dotenv: ['.env.test']
     cmds:
       - go test -v ./backend/llm/...
 
   test-mcp:
     desc: Run MCP integration tests
-    dotenv: ['.env.test']  # Use MCP-specific environment variables
+    dotenv: ['.env.test']
     cmds:
       - go test -v ./backend/llm/mcphost/...
 
@@ -82,40 +82,29 @@ tasks:
     deps: [deps]
     cmds:
       - wails build -platform windows/amd64 {{.BUILD_FLAGS}}
+      - mv {{.BUILD_DIR}}/bin/{{.APP_NAME}}.exe {{.BUILD_DIR}}/{{.APP_NAME}}-windows-amd64.exe
 
   build-mac:
-    desc: Build for macOS
+    desc: Build for macOS Universal
     deps: [deps]
     cmds:
       - wails build -platform darwin/universal {{.BUILD_FLAGS}}
+      - mv {{.BUILD_DIR}}/bin/{{.APP_NAME}} {{.BUILD_DIR}}/{{.APP_NAME}}-mac-universal
 
   build-linux:
     desc: Build for Linux
     deps: [deps]
     cmds:
       - wails build -platform linux/amd64 {{.BUILD_FLAGS}}
+      - mv {{.BUILD_DIR}}/bin/{{.APP_NAME}} {{.BUILD_DIR}}/{{.APP_NAME}}-linux-amd64
 
   package:
     desc: Package for all platforms
-    deps: [package-windows, package-mac, package-linux]
-
-  package-windows:
-    desc: Package for Windows
-    deps: [build-windows]
+    deps: [clean]
     cmds:
-      - wails package -platform windows/amd64 -o {{.BUILD_DIR}}/{{.APP_NAME}}-windows-amd64.exe
-
-  package-mac:
-    desc: Package for macOS
-    deps: [build-mac]
-    cmds:
-      - wails package -platform darwin/universal -o {{.BUILD_DIR}}/{{.APP_NAME}}-mac-universal.app
-
-  package-linux:
-    desc: Package for Linux
-    deps: [build-linux]
-    cmds:
-      - wails package -platform linux/amd64 -o {{.BUILD_DIR}}/{{.APP_NAME}}-linux-amd64
+      - task: build-windows
+      - task: build-mac
+      - task: build-linux
 
   coverage:
     desc: Generate test coverage report
