@@ -38,7 +38,7 @@ export default function SearchContainer() {
 
 
   useEffect(()=>{
-    onConfirmationRequiredEvent({token:"123",tool:"delete tool",args:[23,34]})
+    // onConfirmationRequiredEvent({token:"123",tool:"delete tool",args:[23,34]})
   },[])
 
   /* ------------------------------------------------------------------ */

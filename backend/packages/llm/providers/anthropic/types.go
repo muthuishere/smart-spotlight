@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"log/slog"
-	"smart-spotlight-wails/backend/packages/llm/models"
+	"smart-spotlight-ai/backend/packages/llm/models"
 )
 
 type CreateRequest struct {

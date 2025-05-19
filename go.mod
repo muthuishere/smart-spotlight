@@ -1,6 +1,6 @@
 //_references
 
-module smart-spotlight-wails
+module smart-spotlight-ai
 
 go 1.23.0
 
@@ -13,7 +13,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.28
 	github.com/ollama/ollama v0.5.1
 	github.com/tidwall/gjson v1.18.0
-	github.com/wailsapp/wails/v2 v2.10.1
+	github.com/wailsapp/wails/v2 v2.9.1
 	golang.design/x/hotkey v0.4.1
 	google.golang.org/api v0.228.0
 )

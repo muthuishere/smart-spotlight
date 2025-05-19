@@ -2,7 +2,7 @@ package history
 
 import (
 	"encoding/json"
-	"smart-spotlight-wails/backend/packages/llm/models"
+	"smart-spotlight-ai/backend/packages/llm/models"
 
 	"strings"
 )

@@ -4,7 +4,7 @@ import (
 	"embed"
 	"log/slog"
 	"os"
-	"smart-spotlight-wails/backend"
+	"smart-spotlight-ai/backend"
 	"strings"
 
 	"github.com/tidwall/gjson"
@@ -44,9 +44,7 @@ func getVersion(isDev bool) string {
 
 func main() {
 
-
 	// Print all environment variables starting with APP
-
 
 	// Check for development mode
 	isDev := strings.ToLower(os.Getenv("SMARTSPOTLIGHT_DEV")) == "true"
@@ -59,8 +57,6 @@ func main() {
 		slog.SetDefault(slog.New(handler))
 		slog.Info("Running in development mode")
 	}
-
-
 
 	version := getVersion(isDev)
 	app := backend.NewApp()

@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-		"smart-spotlight-wails/backend/packages/llm/history"
-	"smart-spotlight-wails/backend/packages/llm/models"
 	"log/slog"
-
-
+	"smart-spotlight-ai/backend/packages/llm/history"
+	"smart-spotlight-ai/backend/packages/llm/models"
 )
 
 type Provider struct {

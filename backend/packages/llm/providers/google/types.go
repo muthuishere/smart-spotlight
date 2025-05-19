@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"smart-spotlight-ai/backend/packages/llm/models"
+
 	"github.com/google/generative-ai-go/genai"
-	"smart-spotlight-wails/backend/packages/llm/models"
 )
 
 type ToolCall struct {

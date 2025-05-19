@@ -58,7 +58,7 @@ func GetConfigDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	appConfigDir := filepath.Join(configDir, "smart-spotlight-wails")
+	appConfigDir := filepath.Join(configDir, "smart-spotlight-ai")
 	if err := os.MkdirAll(appConfigDir, 0750); err != nil {
 		return "", err
 	}
@@ -77,7 +77,7 @@ func SaveSettings(s *Settings) error {
 	if err != nil {
 		return err
 	}
-	appConfigDir := filepath.Join(configDir, "smart-spotlight-wails")
+	appConfigDir := filepath.Join(configDir, "smart-spotlight-ai")
 	if err := os.MkdirAll(appConfigDir, 0750); err != nil {
 		return err
 	}
@@ -91,7 +91,7 @@ func LoadSettings() (*Settings, error) {
 	if err != nil {
 		return nil, err
 	}
-	appConfigDir := filepath.Join(configDir, "smart-spotlight-wails")
+	appConfigDir := filepath.Join(configDir, "smart-spotlight-ai")
 	filePath := filepath.Join(appConfigDir, settingsFile)
 
 	data, err := os.ReadFile(filePath)

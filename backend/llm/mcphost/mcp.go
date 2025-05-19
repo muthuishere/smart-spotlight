@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"smart-spotlight-wails/backend/packages/llm/models"
+	"smart-spotlight-ai/backend/packages/llm/models"
 
 	"strings"
 	"time"

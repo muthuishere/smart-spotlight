@@ -3,7 +3,7 @@ package llm
 import (
 	"fmt"
 	"os"
-	"smart-spotlight-wails/backend/settings"
+	"smart-spotlight-ai/backend/settings"
 	"testing"
 )
 

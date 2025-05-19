@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"smart-spotlight-wails/backend/packages/llm/models"
+	"smart-spotlight-ai/backend/packages/llm/models"
 
 	api "github.com/ollama/ollama/api"
 )

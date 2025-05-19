@@ -3,10 +3,11 @@ package mcphost
 import (
 	"context"
 	"log/slog"
-	"smart-spotlight-wails/backend/packages/llm/models"
-	"time"
+	"regexp"
+	"smart-spotlight-ai/backend/packages/llm/models"
 	"strings"
-"regexp"
+	"time"
+
 	mcpclient "github.com/mark3labs/mcp-go/client"
 )
 
@@ -40,7 +41,7 @@ type confirmationReply struct {
 
 // MCPService handles MCP operations
 type MCPService struct {
-	ctx           context.Context   // ← add
+	ctx context.Context // ← add
 
 	settings       *MCPSettings
 	provider       models.Provider
@@ -50,12 +51,11 @@ type MCPService struct {
 	initialBackoff time.Duration
 	maxBackoff     time.Duration
 	maxRetries     int
-	waitingConfirm bool  
-	InputChan      chan PromptEvent // receive prompts / confirmations
-	EventChan      chan PromptEvent // emit tool_use / final_result / …
-	ConfirmChan chan confirmationReply // inside struct
+	waitingConfirm bool
+	InputChan      chan PromptEvent       // receive prompts / confirmations
+	EventChan      chan PromptEvent       // emit tool_use / final_result / …
+	ConfirmChan    chan confirmationReply // inside struct
 
-	
 }
 
 const (
@@ -90,7 +90,7 @@ var mutatingVerbs = []string{
 	"create", "insert", "add",
 	"update", "modify", "patch", "put",
 	"delete", "remove", "drop",
-	"write",  "send",   "post", "publish",
+	"write", "send", "post", "publish",
 }
 
 // build regex once at init

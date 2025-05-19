@@ -8,13 +8,13 @@ import (
 	"log/slog"
 	"path/filepath"
 
-	"smart-spotlight-wails/backend/history"
-	"smart-spotlight-wails/backend/keybind"
-	"smart-spotlight-wails/backend/llm"
-	"smart-spotlight-wails/backend/llm/mcphost"
+	"smart-spotlight-ai/backend/history"
+	"smart-spotlight-ai/backend/keybind"
+	"smart-spotlight-ai/backend/llm"
+	"smart-spotlight-ai/backend/llm/mcphost"
 
-	llmhistory "smart-spotlight-wails/backend/packages/llm/history"
-	"smart-spotlight-wails/backend/settings"
+	llmhistory "smart-spotlight-ai/backend/packages/llm/history"
+	"smart-spotlight-ai/backend/settings"
 
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wailsapp/wails/v2/pkg/runtime"

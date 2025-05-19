@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"smart-spotlight-wails/backend/packages/llm/history"
-	"smart-spotlight-wails/backend/packages/llm/models"
+	"smart-spotlight-ai/backend/packages/llm/history"
+	"smart-spotlight-ai/backend/packages/llm/models"
 	"strings"
 )
 

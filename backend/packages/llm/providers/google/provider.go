@@ -6,10 +6,9 @@ import (
 	"strings"
 
 	"github.com/google/generative-ai-go/genai"
-	
 
-	"smart-spotlight-wails/backend/packages/llm/history"
-	"smart-spotlight-wails/backend/packages/llm/models"
+	"smart-spotlight-ai/backend/packages/llm/history"
+	"smart-spotlight-ai/backend/packages/llm/models"
 
 	"google.golang.org/api/option"
 )

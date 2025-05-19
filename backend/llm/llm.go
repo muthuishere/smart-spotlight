@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"smart-spotlight-wails/backend/settings"
+	"smart-spotlight-ai/backend/settings"
 	"time"
 )
 

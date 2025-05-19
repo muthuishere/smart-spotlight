@@ -8,8 +8,8 @@ jobs:
       fail-fast: false
       matrix:
         build: [
-          {name: Smart-Spotlight-AI, platform: windows/amd64, os: windows-latest},
-          {name: Smart-Spotlight-AI, platform: darwin/universal, os: macos-latest}
+          {name: smart-spotlight-ai, platform: windows/amd64, os: windows-latest},
+          {name: smart-spotlight-ai, platform: darwin/universal, os: macos-latest}
         ]
     runs-on: ${{ matrix.build.os }}
     steps:
