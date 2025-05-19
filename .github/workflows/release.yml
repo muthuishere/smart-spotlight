@@ -8,7 +8,6 @@ jobs:
       fail-fast: false
       matrix:
         build: [
-          {name: Smart-Spotlight-AI, platform: linux/amd64, os: ubuntu-latest},
           {name: Smart-Spotlight-AI, platform: windows/amd64, os: windows-latest},
           {name: Smart-Spotlight-AI, platform: darwin/universal, os: macos-latest}
         ]
