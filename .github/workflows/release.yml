@@ -3,82 +3,38 @@ on:
   workflow_dispatch:
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        build: [
+          {name: Smart-Spotlight-AI, platform: linux/amd64, os: ubuntu-latest},
+          {name: Smart-Spotlight-AI, platform: windows/amd64, os: windows-latest},
+          {name: Smart-Spotlight-AI, platform: darwin/universal, os: macos-latest}
+        ]
+    runs-on: ${{ matrix.build.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+        with:
+          submodules: recursive
 
       - name: Get Version
         id: get_version
         run: |
+          sudo apt-get update && sudo apt-get install -y jq
           VERSION=$(cat wails.json | jq -r .info.productVersion)
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        if: matrix.build.os == 'ubuntu-latest'
 
-  build:
-    needs: version
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            platform: windows/amd64
-            artifact_name: Smart-Spotlight-AI.exe
-            asset_name: Smart-Spotlight-AI-windows-amd64.exe
-          - os: macos-latest
-            platform: darwin/universal
-            artifact_name: Smart-Spotlight-AI
-            asset_name: Smart-Spotlight-AI-mac-universal
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Go
-        uses: actions/setup-go@v4
+      - uses: dAppServer/wails-build-action@v2
         with:
-          go-version: '>=1.21.0'
-      
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20.x'
-
-      - name: Install Linux Dependencies
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libx11-dev libxkbcommon-x11-dev pkg-config xvfb
-
-      - name: Install Task
-        run: sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-      - name: Install Wails
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
-
-      - name: Install Dependencies and Build
-        if: matrix.os != 'ubuntu-latest'
-        run: |
-          task deps
-          wails build -platform ${{ matrix.platform }} -trimpath -ldflags="-s -w"
-
-      - name: Install Dependencies and Build (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          task deps
-          Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
-          export DISPLAY=:99.0
-          wails build -platform ${{ matrix.platform }} -trimpath -ldflags="-s -w"
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.asset_name }}
-          path: build/bin/${{ matrix.artifact_name }}
+          build-name: ${{ matrix.build.name }}
+          build-platform: ${{ matrix.build.platform }}
+          package: true
+          wails-version: "v2.9.0" # Using stable version as recommended in docs
 
   release:
-    needs: [version, build]
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - name: Download Artifacts
@@ -94,8 +50,8 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            artifacts/Smart-Spotlight-AI-windows-amd64.exe/Smart-Spotlight-AI.exe
-            artifacts/Smart-Spotlight-AI-mac-universal/Smart-Spotlight-AI
+            artifacts/Smart-Spotlight-AI-windows-amd64/Smart-Spotlight-AI.exe
+            artifacts/Smart-Spotlight-AI-darwin-universal/Smart-Spotlight-AI
             artifacts/Smart-Spotlight-AI-linux-amd64/Smart-Spotlight-AI
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
