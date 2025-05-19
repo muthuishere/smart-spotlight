@@ -3,23 +3,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  version:
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.get_version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Get Version
-        id: get_version
-        run: |
-          VERSION=$(cat wails.json | jq -r .info.productVersion)
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
   build:
-    needs: version
     strategy:
       fail-fast: false
       matrix:
@@ -34,41 +18,11 @@ jobs:
         with:
           submodules: recursive
 
-      - uses: dAppServer/wails-build-action@v2
+      - uses: dAppServer/wails-build-action@v3
         with:
           build-name: ${{ matrix.build.name }}
           build-platform: ${{ matrix.build.platform }}
           package: true
-          wails-version: "v2.9.0"
-
-      - name: Upload Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.build.name }}-${{ matrix.build.platform }}
-          path: build/bin/${{ matrix.build.name }}*
-
-  release:
-    needs: [version, build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          
-      - name: List Artifacts
-        run: ls -R artifacts/
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: v${{ needs.version.outputs.version }}
-          name: Release v${{ needs.version.outputs.version }}
-          draft: false
-          prerelease: false
-          files: |
-            artifacts/Smart-Spotlight-AI-windows-amd64/Smart-Spotlight-AI.exe
-            artifacts/Smart-Spotlight-AI-darwin-universal/Smart-Spotlight-AI
-            artifacts/Smart-Spotlight-AI-linux-amd64/Smart-Spotlight-AI
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          wails-version: "v2.9.0"  # Using stable version as recommended
+          go-version: "1.23"       # Match our go.mod version
+          node-version: "20.x"     # Match our frontend requirements
