@@ -1,7 +1,6 @@
 {
   "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "smart-spotlight-ai",
-  "outputfilename": "Smart-Spotlight-AI",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
   "frontend:dev:watcher": "npm run dev",
@@ -11,7 +10,7 @@
     "email": "muthuishere@gmail.com"
   },
   "info": {
-    "companyName": "smart-spotlight-ai",
+
     "productName": "Smart Spotlight AI",
     "productVersion": "0.1.0",
     "copyright": "©2025 smart-spotlight-ai",

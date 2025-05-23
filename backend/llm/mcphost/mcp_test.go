@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"reflect"
 	"smart-spotlight-ai/backend/packages/llm/history"
 	"testing"
 	"time"
@@ -15,6 +16,107 @@ import (
 func pp(v any) string {
 	b, _ := json.MarshalIndent(v, "", "  ")
 	return string(b)
+}
+
+func TestMCPConfigUnmarshalJSON(t *testing.T) {
+	// Sample JSON that includes both server types
+	jsonData := `{
+		"mcpServers": {
+			"file_server": {
+				"command": "/usr/bin/node",
+				"args": ["index.js"],
+				"env": {
+					"DEBUG": "true",
+					"PORT": "8080"
+				}
+			},
+			"api_server": {
+				"url": "https://api.example.com/mcp",
+				"headers": [
+					"Authorization: Bearer token123",
+					"Content-Type: application/json"
+				]
+			}
+		}
+	}`
+
+	var config MCPConfig
+	err := json.Unmarshal([]byte(jsonData), &config)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal MCPConfig: %v", err)
+	}
+
+	// Verify STDIO server configuration
+	if len(config.MCPServers) != 2 {
+		t.Errorf("Expected 2 servers, got %d", len(config.MCPServers))
+	}
+
+	// Check file_server (STDIO type)
+	if server, ok := config.MCPServers["file_server"]; ok {
+		if server.Config.GetType() != transportStdio {
+			t.Errorf("Expected file_server to be %s type, got %s", transportStdio, server.Config.GetType())
+		}
+
+		stdioConfig, ok := server.Config.(STDIOServerConfig)
+		if !ok {
+			t.Fatalf("Failed to cast to STDIOServerConfig")
+		}
+
+		// Verify STDIO config fields
+		if stdioConfig.Command != "/usr/bin/node" {
+			t.Errorf("Expected command to be '/usr/bin/node', got '%s'", stdioConfig.Command)
+		}
+
+		if len(stdioConfig.Args) != 1 || stdioConfig.Args[0] != "index.js" {
+			t.Errorf("Args mismatch, got %v", stdioConfig.Args)
+		}
+
+		expectedEnv := map[string]string{"DEBUG": "true", "PORT": "8080"}
+		if !reflect.DeepEqual(stdioConfig.Env, expectedEnv) {
+			t.Errorf("Env mismatch, expected %v, got %v", expectedEnv, stdioConfig.Env)
+		}
+	} else {
+		t.Errorf("file_server not found in config")
+	}
+
+	// Check api_server (SSE type)
+	if server, ok := config.MCPServers["api_server"]; ok {
+		if server.Config.GetType() != transportSSE {
+			t.Errorf("Expected api_server to be %s type, got %s", transportSSE, server.Config.GetType())
+		}
+
+		sseConfig, ok := server.Config.(SSEServerConfig)
+		if !ok {
+			t.Fatalf("Failed to cast to SSEServerConfig")
+		}
+
+		// Verify SSE config fields
+		if sseConfig.Url != "https://api.example.com/mcp" {
+			t.Errorf("Expected URL to be 'https://api.example.com/mcp', got '%s'", sseConfig.Url)
+		}
+
+		expectedHeaders := []string{"Authorization: Bearer token123", "Content-Type: application/json"}
+		if !reflect.DeepEqual(sseConfig.Headers, expectedHeaders) {
+			t.Errorf("Headers mismatch, expected %v, got %v", expectedHeaders, sseConfig.Headers)
+		}
+	} else {
+		t.Errorf("api_server not found in config")
+	}
+
+	// Test round trip marshalling/unmarshalling
+	marshalled, err := json.Marshal(&config)
+	if err != nil {
+		t.Fatalf("Failed to marshal config: %v", err)
+	}
+
+	var roundTripConfig MCPConfig
+	err = json.Unmarshal(marshalled, &roundTripConfig)
+	if err != nil {
+		t.Fatalf("Failed to unmarshal round-trip config: %v", err)
+	}
+
+	// Print the marshalled JSON for debugging
+	t.Logf("Round-trip JSON: %s", string(marshalled))
 }
 
 func TestMCPService(t *testing.T) {

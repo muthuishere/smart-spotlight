@@ -1,3 +1,28 @@
+export namespace backend {
+	
+	export class MCPServerInfo {
+	    name: string;
+	    type: string;
+	    enabled: boolean;
+	    isActive: boolean;
+	    config: {[key: string]: any};
+	
+	    static createFrom(source: any = {}) {
+	        return new MCPServerInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.enabled = source["enabled"];
+	        this.isActive = source["isActive"];
+	        this.config = source["config"];
+	    }
+	}
+
+}
+
 export namespace history {
 	
 	export class SearchHistory {

@@ -2,83 +2,16 @@ import React, { useEffect, useState } from 'react';
 import { WindowSetSize } from '../../../wailsjs/runtime/runtime';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { UpdateSettings, GetSettings, TestAPIConnection } from '../../../wailsjs/go/backend/App';
+import LLMSettingsComponent from './LLMSettingsComponent';
+import MCPSettingsComponent from './MCPSettingsComponent';
 
 function SettingsPage() {
   const navigate = useNavigate();
-  const [settings, setSettings] = useState({
-    baseUrl: '',
-    apiKey: '',
-    model: '',
-    availableModels: [],
-  });
-  const [isLoading, setIsLoading] = useState(true);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testError, setTestError] = useState('');
-  const [testSuccess, setTestSuccess] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [activeTab, setActiveTab] = useState('general');
 
   useEffect(() => {
-    WindowSetSize(650, 400);
-    GetSettings().then(currentSettings => {
-      if (currentSettings) {
-        setSettings(currentSettings);
-      }
-      setIsLoading(false);
-    }).catch(err => {
-      console.error("Error fetching settings:", err);
-      setIsLoading(false);
-    });
+    WindowSetSize(650, 500); // Set window size for settings page
   }, []);
-
-  const handleInputChange = (event) => {
-    const { name, value } = event.target;
-    setSettings(prevSettings => ({
-      ...prevSettings,
-      [name]: value
-    }));
-    setTestError('');
-    setTestSuccess(false);
-    setSaveSuccess(false);
-  };
-
-  const handleTestConnection = async () => {
-    setIsTesting(true);
-    setTestError('');
-    setTestSuccess(false);
-    
-    try {
-      await UpdateSettings(settings);
-      await TestAPIConnection();
-      setTestSuccess(true);
-    } catch (error) {
-      setTestError(error.toString());
-    } finally {
-      setIsTesting(false);
-    }
-  };
-
-  const handleSaveChanges = async () => {
-    setIsSaving(true);
-    setSaveSuccess(false);
-    try {
-      await UpdateSettings(settings);
-      setSaveSuccess(true);
-      setTimeout(() => {
-        setSaveSuccess(false);
-      }, 3000);
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-      setTestError('Failed to save settings: ' + error.toString());
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  if (isLoading) {
-    return <div className="p-4 text-center">Loading settings...</div>;
-  }
 
   return (
     <div className="flex flex-col h-full">
@@ -93,85 +26,30 @@ function SettingsPage() {
         <h2 className="text-lg font-semibold text-left">Settings</h2>
       </div>
 
-      <div className="flex-1 px-4 pb-4 space-y-6 overflow-auto -webkit-app-region-no-drag">
-        <section className="space-y-3">
-          <h3 className="text-sm font-medium text-left">AI Configuration</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between gap-4">
-              <label className="text-xs text-muted-foreground" htmlFor="baseUrl">Base URL</label>
-              <input 
-                type="text" 
-                id="baseUrl" 
-                name="baseUrl"
-                value={settings.baseUrl}
-                onChange={handleInputChange}
-                className="flex-1 max-w-[300px] text-sm bg-background rounded-md border border-border px-2 py-1.5"
-                placeholder="https://api.openai.com/v1"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <label className="text-xs text-muted-foreground" htmlFor="apiKey">API Key</label>
-              <input 
-                type="password" 
-                id="apiKey" 
-                name="apiKey"
-                value={settings.apiKey}
-                onChange={handleInputChange}
-                className="flex-1 max-w-[300px] text-sm bg-background rounded-md border border-border px-2 py-1.5"
-                placeholder="Enter your API key"
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <label className="text-xs text-muted-foreground" htmlFor="model">AI Model</label>
-              <input 
-                type="text" 
-                id="model" 
-                name="model"
-                value={settings.model}
-                onChange={handleInputChange}
-                className="flex-1 max-w-[300px] text-sm bg-background rounded-md border border-border px-2 py-1.5"
-                placeholder="e.g., gpt-3.5-turbo"
-              />
-            </div>
-
-            <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={handleTestConnection}
-                disabled={isTesting || !settings.apiKey || !settings.model || !settings.baseUrl}
-                className="px-3 py-1 text-sm rounded-md bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isTesting ? 'Testing...' : 'Test Connection'}
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <div className="flex flex-col items-end gap-2">
-          {saveSuccess && (
-            <div className="text-sm text-green-500 animate-fade-in">
-              Settings saved successfully!
-            </div>
-          )}
-          {testSuccess && !saveSuccess && (
-            <div className="text-sm text-green-500">
-              Connection test successful!
-            </div>
-          )}
-          {testError && (
-            <div className="text-sm text-red-500">
-              {testError}
-            </div>
-          )}
-          <button 
-            onClick={handleSaveChanges}
-            disabled={isSaving}
-            className="px-4 py-1.5 text-sm rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      {/* Tabs */}
+      <div className="px-4 border-b border-border -webkit-app-region-no-drag">
+        <div className="flex space-x-4">
+          <button
+            onClick={() => setActiveTab('general')}
+            className={`pb-2 text-sm ${activeTab === 'general' ? 'text-primary border-b-2 border-primary font-medium' : 'text-muted-foreground hover:text-text'}`}
           >
-            {isSaving ? 'Saving...' : 'Save Changes'}
+            General
+          </button>
+          <button
+            onClick={() => setActiveTab('mcp')}
+            className={`pb-2 text-sm ${activeTab === 'mcp' ? 'text-primary border-b-2 border-primary font-medium' : 'text-muted-foreground hover:text-text'}`}
+          >
+            MCP Servers
           </button>
         </div>
+      </div>
+
+      <div className="flex-1 px-4 pb-4 space-y-6 overflow-auto -webkit-app-region-no-drag">
+        {/* LLM Settings Tab */}
+        {activeTab === 'general' && <LLMSettingsComponent />}
+        
+        {/* MCP Servers Tab */}
+        {activeTab === 'mcp' && <MCPSettingsComponent />}
       </div>
     </div>
   );

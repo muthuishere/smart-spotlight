@@ -22,13 +22,14 @@ import (
 
 // App struct
 type App struct {
-	ctx             context.Context
-	version         string
-	db              *sql.DB
-	startupComplete bool
-	historyService  *history.Service
-	llmService      *llm.Service
-	mcpService      *mcphost.MCPService
+	ctx                      context.Context
+	version                  string
+	db                       *sql.DB
+	startupComplete          bool
+	historyService           *history.Service
+	llmService               *llm.Service
+	mcpService               *mcphost.MCPService
+	mcpServerSettingsService *settings.MCPServerSettingsService
 }
 
 // NewApp creates a new App application struct
@@ -77,6 +78,13 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	a.llmService = llm.NewService(settings.GetCurrentSettings())
+
+	// Initialize MCP Server Settings Service
+	// Use the already obtained configDir instead of calling GetConfigDir again
+	a.mcpServerSettingsService, err = settings.NewMCPServerSettingsService(configDir)
+	if err != nil {
+		log.Printf("Error initializing MCP server settings service: %v", err)
+	}
 
 	// Initialize MCP service
 	if err := a.initializeMCPService(); err != nil {

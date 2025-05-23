@@ -62,6 +62,12 @@ tasks:
     cmds:
       - go test -v ./backend/llm/mcphost/...
 
+  test-mcp-settings:
+    desc: Run MCP settings service test
+    dotenv: ['.env.test']
+    cmds:
+      - go test -v ./backend/settings -run TestMCPServerSettingsServiceE2E
+
   build:
     desc: Build the application
     deps: [deps]
